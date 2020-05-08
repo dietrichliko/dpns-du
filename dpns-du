@@ -1,0 +1,70 @@
+#! /usr/bin/env python2
+# 
+#   dpns-du dirame ...
+#
+#     Get the size of one or more directories on the DPM. Relative directory  (no
+#     leading slash) are relative to /dpm/oeaw.ac.at/homne/cms/store
+#
+#     The command requires a configured grid interface and a valid proxy
+#
+#   Dietrich Liko <Dietrich.Liko@oeaw.ac.at>
+
+import os
+import stat
+import sys
+import dpm
+
+def dpm_walk(top,topdown=True):
+
+    dirs  = []
+    names = []
+    sizes = []
+
+    dpm_dir = dpm.dpns_opendir(top)
+    dirent = dpm.dpns_readdirxc(dpm_dir)
+    while dirent:
+        if stat.S_ISDIR(dirent.filemode):
+            dirs.append(dirent.d_name)
+        elif not stat.S_ISLNK(dirent.filemode):
+            names.append(dirent.d_name)
+            sizes.append(dirent.filesize)
+        dirent = dpm.dpns_readdirxc(dpm_dir)
+    dpm.dpns_closedir(dpm_dir)
+
+    if topdown:
+        yield top, dirs, names, sizes
+    for name in dirs:
+        path = os.path.join(top, name)
+        for x in dpm_walk(path, topdown):
+            yield x
+    if not topdown:
+        yield top, dirs, names, sizes
+
+
+def sizeof_fmt(num, use_kibibyte=True):
+    base, suffix = [(1000.,'B'),(1024.,'iB')][use_kibibyte]
+    for x in ['B'] + map(lambda x: x+suffix, list('kMGTP')):
+        if -base < num < base:
+            return "%3.1f %s" % (num, x)
+        num /= base
+    return "%3.1f %s" % (num, x)
+
+if __name__ == '__main__':
+
+
+    for topdir in sys.argv[1:]:
+        if topdir[0] != '/':
+           topdir = '/dpm/oeaw.ac.at/home/cms/store/' + topdir
+
+        nr_files = 0
+        size_files = 0
+        for directory, subdirs, names, sizes in dpm_walk(topdir):
+           print >> sys.stderr, '.',
+           sys.stderr.flush()
+           nr_files += len(names)
+           size_files += sum(sizes)
+
+        print >> sys.stderr
+        print topdir
+        print 'Nr. of Files: %d' % nr_files
+        print 'Total Size: %s' % sizeof_fmt(size_files)
